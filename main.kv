@@ -1,5 +1,7 @@
 <MainScreen>:
     name: 'main'
+    on_enter: root.start_joy_thread() # JOYSTICK  :D
+    magnetControl: magnetControl
     FloatLayout:
         size_hint: None, None
 
@@ -29,13 +31,13 @@
             size_hint: None,None
             size: 300,100
             on_press: root.auto()
-            on_release: root.resetColors()
+
 
         # Turn on/off gate
         DPEAButton:
             id: armControl
-            color: 0.180, 0.188, 0.980, 1
-            text: "Lower Arm"
+            color: 0, 0, 1, 1
+            text: "Arm Up"
             center_x: root.width * 0.35
             y: root.height * 0.35
             background_color: 0, 0, 0, 0
@@ -43,12 +45,12 @@
             size_hint: None,None
             size: 300,100
             on_press: root.toggleArm()
-            on_release: root.resetColors()
+
 
         DPEAButton:
             id: magnetControl
-            color: 0.180, 0.188, 0.980, 1
-            text: "Hold Ball"
+            color: 1, 0, 0, 1
+            text: "Magnet Off"
             center_x: root.width * 0.65
             y: root.height * 0.35
             background_color: 0, 0, 0, 0
@@ -56,7 +58,7 @@
             size_hint: None,None
             size: 300,100
             on_press: root.toggleMagnet()
-            on_release: root.resetColors()
+
 
 	##################
 	##### SLIDERS ####

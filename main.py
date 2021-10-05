@@ -5,10 +5,15 @@
 import math
 import sys
 import time
+from threading import Thread
+import os
+os.environ['DISPLAY'] = ":0.0"
+os.environ['KIVY_WINDOW'] = 'egl_rpi'
 
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.core.window import Window
+from kivy.properties import ObjectProperty
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
@@ -24,6 +29,7 @@ from kivy.animation import Animation
 from functools import partial
 from kivy.config import Config
 from kivy.core.window import Window
+from pidev.Joystick import Joystick # buttons are actually buttons -1
 from pidev.kivy import DPEAButton
 from pidev.kivy import PauseScreen
 from time import sleep
@@ -31,6 +37,13 @@ import RPi.GPIO as GPIO
 from pidev.stepper import stepper
 from pidev.Cyprus_Commands import Cyprus_Commands_RPi as cyprus
 
+
+
+#PORTS
+# 1 is cyprus
+# 2 is magnet
+# 3 is tall tower
+# 4 is short tower
 
 # ////////////////////////////////////////////////////////////////
 # //                      GLOBAL VARIABLES                      //
@@ -67,7 +80,7 @@ Builder.load_file('main.kv')
 Window.clearcolor = (.1, .1,.1, 1) # (WHITE)
 
 cyprus.open_spi()
-
+cyprus.initialize()
 # ////////////////////////////////////////////////////////////////
 # //                    SLUSH/HARDWARE SETUP                    //
 # ////////////////////////////////////////////////////////////////
@@ -81,9 +94,19 @@ arm = stepper(port = 0, speed = 10)
 # ////////////////////////////////////////////////////////////////
 	
 class MainScreen(Screen):
+    cyprus.setup_servo(2)
     version = cyprus.read_firmware_version()
     armPosition = 0
     lastClick = time.clock()
+    magnetControl = ObjectProperty(None)
+
+
+    joystick = Joystick(0,False)
+
+
+
+    s0 = stepper(port=0, micro_steps=32, hold_current=20, run_current=20, accel_current=20, deaccel_current=20,
+                 steps_per_unit=200, speed=3)
 
     def __init__(self, **kwargs):
         super(MainScreen, self).__init__(**kwargs)
@@ -100,14 +123,68 @@ class MainScreen(Screen):
     def toggleArm(self):
         print("Process arm movement here")
 
+
+    def start_joy_thread(self):
+        print("Starting Thread")
+        Thread(target = self.joy_update).start()
+
+        """
+        Get the state of a button. This project uses the "Logitech Attack 3" which contains 11 physical buttons but are
+        indexed 0-10
+        :param button_num: Button number to get the state of
+        :raises: ValueError if the given button number is not in the range of available buttons
+        :rtype: int
+        :return: 0 or 1 (1=button depressed)
+        """
+
+    def joy_update(self):
+        while True:
+            #self.joy_y_val = self.joystick.get_axis
+
+            if self.joystick.get_axis('x') == 0:
+                self.softstop()
+
+            if self.joystick.get_button_state(0) == 1:
+                self.toggleMagnet()
+                sleep(0.3)
+
+            if self.joystick.get_axis('x') > 0:
+                self.softstop()
+                print(self.joystick.get_axis('x'))
+                for i in range(0,21):
+                    self.s0.start_relative_move(0.2)
+            if self.joystick.get_axis('x') < 0:
+                self.softstop()
+                print(self.joystick.get_axis('x'))
+                for i in range(0,21):
+                    self.s0.start_relative_move(-0.2)
+
+
+            if self.joystick.get_axis('y') > 0.5:
+                cyprus.set_pwm_values(1, period_value=100000, compare_value=0, compare_mode=cyprus.LESS_THAN_OR_EQUAL)
+            if self.joystick.get_axis('y') < -0.5:
+                cyprus.set_pwm_values(1, period_value=100000, compare_value=100000, compare_mode=cyprus.LESS_THAN_OR_EQUAL)
+
     def toggleMagnet(self):
-        print("Process magnet here")
-        
+        if self.magnetControl.text == "Magnet Off":
+            cyprus.set_servo_position(2, 0)
+            self.magnetControl.text = "Magnet On"
+            self.magnetControl.color = 0, 0, 1, 1
+        elif self.magnetControl.text == "Magnet On":
+            cyprus.set_servo_position(2, 0.5)
+            self.magnetControl.color = 1, 0, 0, 1
+            self.magnetControl.text = "Magnet Off"
+
+    def softstop(self):
+        self.s0.softStop()
+
     def auto(self):
         print("Run the arm automatically here")
 
     def setArmPosition(self, position):
-        print("Move arm here")
+        print("Blue means off, red means off")
+
+
 
     def homeArm(self):
         arm.home(self.homeDirection)
