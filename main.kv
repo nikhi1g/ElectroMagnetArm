@@ -1,5 +1,7 @@
 <MainScreen>:
     name: 'main'
+    armControl: armControl
+    auto: auto
     on_enter: root.start_joy_thread() # JOYSTICK  :D
     magnetControl: magnetControl
     FloatLayout:
@@ -30,13 +32,13 @@
             background_normal: ''
             size_hint: None,None
             size: 300,100
-            on_press: root.auto()
+            on_press: root.threadautomatic()
 
 
         # Turn on/off gate
         DPEAButton:
             id: armControl
-            color: 0, 0, 1, 1
+            color: 0,0,1,1
             text: "Arm Up"
             center_x: root.width * 0.35
             y: root.height * 0.35
@@ -44,8 +46,7 @@
             background_normal: ''
             size_hint: None,None
             size: 300,100
-            on_press: root.toggleArm()
-
+            on_press: root.threadforarm()
 
         DPEAButton:
             id: magnetControl

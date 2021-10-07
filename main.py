@@ -99,13 +99,14 @@ class MainScreen(Screen):
     cyprus.setup_servo(2)
     version = cyprus.read_firmware_version()
     armPosition = 0
+    armControl = ObjectProperty(None)
     lastClick = time.clock()
     magnetControl = ObjectProperty(None)
-
+    auto = ObjectProperty(None)
 
     joystick = Joystick(0,False)
 
-
+    ison = False
 
     s0 = stepper(port=0, micro_steps=32, hold_current=20, run_current=20, accel_current=20, deaccel_current=20,
                  steps_per_unit=200, speed=3)
@@ -128,8 +129,8 @@ class MainScreen(Screen):
 
     def start_joy_thread(self):
         print("Starting Thread")
+        self.ison = True
         Thread(target = self.joy_update).start()
-
         """
         Get the state of a button. This project uses the "Logitech Attack 3" which contains 11 physical buttons but are
         indexed 0-10
@@ -140,15 +141,15 @@ class MainScreen(Screen):
         """
 
     def joy_update(self):
-        while True:
+        while self.ison:
             #self.joy_y_val = self.joystick.get_axis
             #simple rotation
             if self.joystick.get_button_state(3) == 1: #Actually button labeled 4
-                self.s0.setMaxSpeed(100)
+                self.s0.setMaxSpeed(300)
                 self.s0.relative_move(-2)
 
             if self.joystick.get_button_state(4) == 1: #Actually button labeled 5
-                self.s0.setMaxSpeed(100)
+                self.s0.setMaxSpeed(300)
                 self.s0.relative_move(2)
             #stop
             if -0.2 < self.joystick.get_axis('x') < 0.2: # Stop At 0, contingent on the 0.2 bounds
@@ -159,7 +160,7 @@ class MainScreen(Screen):
                 cyprus.set_pwm_values(1, period_value=100000, compare_value=0, compare_mode=cyprus.LESS_THAN_OR_EQUAL)#set arm to up pos
                 if self.magnetControl.text == 'Magnet Off': #magnet set to on
                     self.toggleMagnet()
-                self.s0.setMaxSpeed(50)
+                self.s0.setMaxSpeed(88)
                 self.s0.relative_move(2)
                 self.isbusy()
                 if (cyprus.read_gpio() & 0b0010) == 0: #port 6 tall
@@ -192,15 +193,15 @@ class MainScreen(Screen):
 
             if self.joystick.get_button_state(0) == 1: #Trigger ButtonMagnet
                 self.toggleMagnet()
-                sleep(0.3)
+                sleep(0.1)
 
             #leftright swivel
-            if self.joystick.get_axis('x') > 0.2:
+            if self.joystick.get_axis('x') > 0.2 or self.joystick.get_button_state(7):#BUTTON8
                 self.softstop()
                 print(self.joystick.get_axis('x'))
                 for i in range(0,24):
                     self.s0.start_relative_move(0.3)
-            if self.joystick.get_axis('x') < -0.2:
+            if self.joystick.get_axis('x') < -0.2 or self.joystick.get_button_state(8):#button9
                 self.softstop()
                 print(self.joystick.get_axis('x'))
                 for i in range(0,24):
@@ -208,12 +209,15 @@ class MainScreen(Screen):
 
             #piston updown
 
-            if self.joystick.get_axis('y') > 0.5:
+            if self.joystick.get_axis('y') > 0.5 or self.joystick.get_button_state(6): # button 7
                 print("MovingUp")
                 cyprus.set_pwm_values(1, period_value=100000, compare_value=0, compare_mode=cyprus.LESS_THAN_OR_EQUAL)
-            if self.joystick.get_axis('y') < -0.5:
+            if self.joystick.get_axis('y') < -0.5 or self.joystick.get_button_state(5): # button 6
                 print("MovingDown")
                 cyprus.set_pwm_values(1, period_value=100000, compare_value=100000, compare_mode=cyprus.LESS_THAN_OR_EQUAL)
+
+
+        print('leaving thread...')
 
     def toggleMagnet(self): #turns magnet on and off
         if self.magnetControl.text == "Magnet Off":
@@ -230,10 +234,10 @@ class MainScreen(Screen):
 
     def armDown(self):
         cyprus.set_pwm_values(1, period_value=100000, compare_value=100000, compare_mode=cyprus.LESS_THAN_OR_EQUAL)
-        sleep(3)
+        sleep(0.8)
     def armUp(self):
         cyprus.set_pwm_values(1, period_value=100000, compare_value=0, compare_mode=cyprus.LESS_THAN_OR_EQUAL)
-        sleep(3)
+        sleep(0.2)
 
     def tallStand(self):
         if (cyprus.read_gpio() & 0b0001) == 0: #port 7 which is short
@@ -244,16 +248,23 @@ class MainScreen(Screen):
             return True
 
     def isbusy(self):
-        while self.s0.isBusy():
-            sleep(0.3)
 
+        while self.s0.isBusy() and self.ison == True:
+                sleep(0.2)
 
+    def togglearm(self):
+        if self.armControl.text == 'Arm Up':
+            self.armControl.text = 'Arm Down'
+            self.armControl.color = 0,0,0,1
+            self.armDown()
+        elif self.armControl.text == 'Arm Down':
+            self.armControl.text = 'Arm Up'
+            self.armControl.color = 0,0,1,1
+            self.armUp()
 
-    def auto(self):
-        print("Run the arm automatically here")
+    def threadforarm(self):
+        Thread(target = self.togglearm).start()
 
-    def setArmPosition(self, position):
-        print("Blue means on, red means off")
 
     def home(self):
         self.s0.relative_move(2)
@@ -261,11 +272,6 @@ class MainScreen(Screen):
     def homeArm(self):
         arm.home(self.homeDirection)
 
-    def isBallOnTallTower(self):
-        print("Determine if ball is on the top tower")
-
-    def isBallOnShortTower(self):
-        print("Determine if ball is on the bottom tower")
 
     def initialize(self):
         print("Home arm and turn off magnet")
@@ -277,6 +283,47 @@ class MainScreen(Screen):
 
     def quit(self):
         MyApp().stop()
+
+    def threadautomatic(self):
+        self.ison = False
+        sleep(2)
+        Thread(target = self.automatic).start()
+
+    def maxspeed(self):
+        self.s0.setMaxSpeed(100)
+
+    def automatic(self): #{ERROR MESSAGE TypeError: 'kivy.weakproxy.WeakProxy' object is not callable } whydoes this happen and everything else works, this is the last thing to finish.
+            self.s0.setMaxSpeed(100)
+            self.s0.relative_move(2)
+            if self.magnetControl.text == 'Magnet Off':
+                self.toggleMagnet()
+            if (cyprus.read_gpio() & 0b0010) == 0: #port 6 tall
+                self.s0.relative_move(-0.8)
+                sleep(0.3)
+                self.armDown()
+                self.armUp()
+                self.s0.relative_move(0.35)
+                self.armDown()
+                self.toggleMagnet()
+                self.armUp()
+                self.home()
+
+
+
+            elif (cyprus.read_gpio() & 0b0001) == 0: #port 7 short
+                self.s0.relative_move(-0.45)
+                sleep(0.3)
+                self.armDown()
+                self.armUp()
+                self.s0.relative_move(-0.35)
+                self.armDown()
+                self.toggleMagnet()
+                self.armUp()
+                self.home()
+            sleep(2)
+            Thread(target=self.start_joy_thread).start()
+
+
 
 sm.add_widget(MainScreen(name = 'main'))
 
